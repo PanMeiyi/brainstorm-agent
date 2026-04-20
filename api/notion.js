@@ -18,15 +18,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const upstream = await fetch(`https://api.notion.com${endpoint}`, {
-      method,
+    const upperMethod = String(method || "POST").toUpperCase();
+    const options = {
+      method: upperMethod,
       headers: {
         Authorization: `Bearer ${notionKey}`,
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28",
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    };
+    if (upperMethod !== "GET" && upperMethod !== "HEAD" && body !== undefined) {
+      options.body = JSON.stringify(body);
+    }
+
+    const upstream = await fetch(`https://api.notion.com${endpoint}`, options);
 
     const text = await upstream.text();
 
