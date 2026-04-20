@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>头脑风暴智能体</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface-hover: #243044;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --text-muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #eab308;
+      --radius: 10px;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+    .main { min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; flex-shrink: 0; }
+    .api-row { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 200px; }
+    .api-row label { font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; }
+    .api-row input[type="password"], .api-row input[type="text"] { flex: 1; min-width: 120px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 0.9rem; }
+    .api-row input:focus, .composer textarea:focus, .report-panel textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+    .btn { padding: 8px 14px; border: none; border-radius: var(--radius); font-size: 0.9rem; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: var(--border); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .phase-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 16px; background: linear-gradient(90deg, #1e3a5f22, transparent); border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .phase-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+    .phase-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
+    .phase-badge.phase-2 .dot { background: var(--accent); }
+    .phase-badge.phase-3 .dot { background: var(--success); }
+    .hint { color: var(--text-muted); font-size: 0.85rem; }
+    .chat-wrap { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 900px; width: 100%; margin: 0 auto; }
+    .msg { max-width: 92%; padding: 12px 14px; border-radius: var(--radius); line-height: 1.55; font-size: 0.95rem; white-space: pre-wrap; word-break: break-word; }
+    .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg .role-label { font-size: 0.75rem; opacity: 0.85; margin-bottom: 6px; font-weight: 600; }
+    .msg.user .role-label { color: rgba(255, 255, 255, 0.85); }
+    .msg.assistant .role-label { color: var(--accent); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 8px; max-width: 900px; width: 100%; margin: 0 auto; }
+    .composer { display: flex; gap: 10px; padding: 12px 16px 20px; max-width: 900px; width: 100%; margin: 0 auto; align-items: flex-end; }
+    .composer textarea { flex: 1; min-height: 80px; max-height: 220px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.95rem; resize: vertical; }
+    .composer .btn-send { min-height: 80px; padding: 0 20px; }
+    .loading { padding: 8px 16px; color: var(--text-muted); font-size: 0.9rem; max-width: 900px; margin: 0 auto; width: 100%; }
+    .error-banner { margin: 8px 16px; padding: 10px 14px; background: #7f1d1d44; border: 1px solid #b91c1c; border-radius: var(--radius); color: #fecaca; font-size: 0.9rem; display: none; }
+    .error-banner.visible { display: block; }
+    .report-panel { max-width: 900px; width: 100%; margin: 0 auto 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: none; }
+    .report-panel.visible { display: block; }
+    .report-panel h3 { margin: 0 0 8px; font-size: 0.95rem; }
+    .report-panel textarea { width: 100%; min-height: 240px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 10px; resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: 0.88rem; line-height: 1.5; }
+    .report-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .notion-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--border); background: #111926; }
+    .notion-row label { font-size: 0.85rem; color: var(--text-muted); }
+    .notion-row input { min-width: 180px; }
+    .sidebar { border-left: 1px solid var(--border); background: var(--surface); padding: 12px; display: flex; flex-direction: column; min-height: 100vh; gap: 10px; }
+    .sidebar h2 { margin: 0; font-size: 0.95rem; }
+    .idea-list { display: flex; flex-direction: column; gap: 8px; overflow: auto; padding-right: 2px; }
+    .idea-item { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .idea-item-title { font-size: 0.88rem; font-weight: 600; color: var(--text); word-break: break-word; }
+    .idea-item-meta { font-size: 0.78rem; color: var(--text-muted); }
+    .idea-item-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    @media (max-width: 900px) {
+      body { grid-template-columns: 1fr; }
+      .sidebar { min-height: auto; border-left: none; border-top: 1px solid var(--border); }
+    }
+    @media (max-width: 600px) {
+      header { flex-direction: column; align-items: stretch; }
+      .api-row { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="main">
+    <header>
+      <h1>头脑风暴智能体</h1>
+      <div class="api-row">
+        <label for="apiKey">DeepSeek API Key</label>
+        <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" />
+        <button type="button" class="btn btn-primary" id="btnSaveKey">保存</button>
+      </div>
+      <button type="button" class="btn btn-secondary" id="btnSaveIdea">保存当前 Idea</button>
+      <button type="button" class="btn btn-secondary" id="btnReset">重置对话</button>
+    </header>
+    <div class="notion-row">
+      <label for="notionParentId">父页面/数据库 ID</label>
+      <input type="text" id="notionParentId" placeholder="Notion Parent ID（可粘贴页面/数据库链接）" autocomplete="off" />
+      <button type="button" class="btn btn-secondary" id="btnSaveNotion">保存 Notion 配置</button>
+      <button type="button" class="btn btn-secondary" id="btnTestNotion">测试连接</button>
+    </div>
+
+    <div class="phase-bar">
+      <span class="phase-badge" id="phaseBadge"><span class="dot"></span><span id="phaseLabel">阶段一：深度质询</span></span>
+      <span class="hint" id="phaseHint">AI 将一次提出一个问题；质询满 3 轮后可进入下一阶段。</span>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+    <div class="chat-wrap" id="chat"></div>
+    <div class="loading" id="loading" style="display: none">正在思考…</div>
+
+    <div class="toolbar">
+      <button type="button" class="btn btn-secondary" id="btnGenerateReport">📄 生成报告</button>
+      <button type="button" class="btn btn-secondary" id="btnSkip">跳过当前问题</button>
+      <button type="button" class="btn btn-secondary" id="btnNextPhase" disabled>进入下一阶段（信息补全）</button>
+      <button type="button" class="btn btn-secondary" id="btnPhase3" style="display: none">确认并进入阶段三（细化）</button>
+    </div>
+
+    <section class="report-panel" id="reportPanel">
+      <h3>结构化报告（Markdown，可编辑）</h3>
+      <textarea id="reportEditor" placeholder="点击“生成报告”后，这里会出现报告内容。"></textarea>
+      <div class="report-actions">
+        <button type="button" class="btn btn-primary" id="btnSaveReport">保存报告到当前 Idea</button>
+        <button type="button" class="btn btn-secondary" id="btnExportReport">导出报告 .txt</button>
+        <button type="button" class="btn btn-secondary" id="btnCopyReport">复制到剪贴板</button>
+        <button type="button" class="btn btn-secondary" id="btnToggleReport">收起</button>
+      </div>
+    </section>
+
+    <div class="composer">
+      <textarea id="input" placeholder="输入你的想法或回复…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <button type="button" class="btn btn-primary btn-send" id="btnSend">发送</button>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <h2>Idea 列表</h2>
+    <div class="hint">支持查看报告与恢复会话快照。</div>
+    <div class="idea-list" id="ideaList"></div>
+  </aside>
+
+  <script>
+    (function () {
+      "use strict";
+      var API_URL = "https://api.deepseek.com/v1/chat/completions";
+      var MODEL = "deepseek-chat";
+      var STORAGE_KEY = "brainstorm-agent-v2";
+      var DB_NAME = "brainstorm_agent_db";
+      var DB_VERSION = 1;
+      var IDEA_STORE = "ideas";
+      var SYSTEM_PROMPT =
+        "你是一个头脑风暴智能体，专门帮助用户把模糊的想法变得清晰、可落地。你的核心风格是苏格拉底式质询：在细化之前，先对用户的想法进行充分挑战。\n\n" +
+        "整个流程分为三个阶段：深度质询 → 信息补全 → 多轮细化。\n\n" +
+        "阶段一：深度质询\n- 一次只问一个问题，每次从以下类型中选择：逻辑漏洞、反向案例、隐藏假设、视角切换、极端化测试、情绪溯源、可行性挑战。\n- 至少提出 3 个不同质询后，主动询问是否进入信息补全阶段。\n- 用户可回复“跳过”或“进入下一阶段”。\n\n" +
+        "阶段二：信息补全\n根据用户想法判断模块（写作/产品/做事/其他），列出维度与选项，收集完输出确认摘要后询问是否进入阶段三。\n\n" +
+        "阶段三：多轮细化（至少3轮）\n每轮输出该轮产出并主动追问下一层细节。做事模块第三轮必须提醒用户自行查询 12306/天气等，不伪造实时结果。\n\n" +
+        "输出格式要求：不要使用 Markdown 标记，直接输出纯文本。";
+
+      var state = { messages: [], uiPhase: 1, phase1AssistantCount: 0, currentIdeaId: null };
+      var dbPromise = null;
+      var el = {
+        chat: document.getElementById("chat"), input: document.getElementById("input"), apiKey: document.getElementById("apiKey"),
+        loading: document.getElementById("loading"), errorBanner: document.getElementById("errorBanner"),
+        phaseBadge: document.getElementById("phaseBadge"), phaseLabel: document.getElementById("phaseLabel"), phaseHint: document.getElementById("phaseHint"),
+        btnSend: document.getElementById("btnSend"), btnSkip: document.getElementById("btnSkip"), btnNextPhase: document.getElementById("btnNextPhase"),
+        btnPhase3: document.getElementById("btnPhase3"), btnReset: document.getElementById("btnReset"), btnSaveKey: document.getElementById("btnSaveKey"),
+        btnSaveIdea: document.getElementById("btnSaveIdea"), btnGenerateReport: document.getElementById("btnGenerateReport"),
+        reportPanel: document.getElementById("reportPanel"), reportEditor: document.getElementById("reportEditor"),
+        btnSaveReport: document.getElementById("btnSaveReport"), btnExportReport: document.getElementById("btnExportReport"), btnCopyReport: document.getElementById("btnCopyReport"),
+        btnToggleReport: document.getElementById("btnToggleReport"), ideaList: document.getElementById("ideaList"),
+        notionParentId: document.getElementById("notionParentId"),
+        btnSaveNotion: document.getElementById("btnSaveNotion"), btnTestNotion: document.getElementById("btnTestNotion")
+      };
+
+      function loadKey() { try { var k = localStorage.getItem("deepseek_api_key"); if (k) el.apiKey.value = k; } catch (e) {} }
+      function saveKey() { try { localStorage.setItem("deepseek_api_key", el.apiKey.value.trim()); } catch (e) {} }
+      function loadNotionConfig() {
+        try {
+          var parentId = localStorage.getItem("notion_parent_id");
+          if (parentId) el.notionParentId.value = parentId;
+        } catch (e) {}
+      }
+      function saveNotionConfig() {
+        try {
+          localStorage.setItem("notion_parent_id", (el.notionParentId.value || "").trim());
+        } catch (e) {}
+      }
+      function loadState() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+          var data = JSON.parse(raw);
+          state.messages = Array.isArray(data.messages) ? data.messages : [];
+          state.uiPhase = data.uiPhase || 1;
+          state.phase1AssistantCount = typeof data.phase1AssistantCount === "number" ? data.phase1AssistantCount : 0;
+          state.currentIdeaId = data.currentIdeaId || null;
+        } catch (e) {}
+      }
+      function persistState() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages: state.messages, uiPhase: state.uiPhase, phase1AssistantCount: state.phase1AssistantCount, currentIdeaId: state.currentIdeaId })); } catch (e) {}
+      }
+      function showError(msg) { el.errorBanner.textContent = msg || ""; el.errorBanner.classList.toggle("visible", !!msg); }
+      function phaseLabels() { return ({1:"阶段一：深度质询",2:"阶段二：信息补全",3:"阶段三：多轮细化"})[state.uiPhase] || "阶段一：深度质询"; }
+      function updatePhaseUI() {
+        el.phaseLabel.textContent = phaseLabels(); el.phaseBadge.className = "phase-badge phase-" + state.uiPhase;
+        el.phaseHint.textContent = ({1:"AI 一次一问；质询满 3 轮后可进入下一阶段。",2:"按维度补全信息，确认后进入细化。",3:"持续细化并形成可落地内容。"})[state.uiPhase];
+        el.btnNextPhase.disabled = state.uiPhase !== 1 || state.phase1AssistantCount < 3;
+        el.btnPhase3.style.display = state.uiPhase === 2 ? "inline-block" : "none";
+      }
+      function renderMessages() {
+        el.chat.innerHTML = "";
+        state.messages.forEach(function (m) {
+          var div = document.createElement("div"); div.className = "msg " + (m.role === "user" ? "user" : "assistant");
+          var label = document.createElement("div"); label.className = "role-label"; label.textContent = m.role === "user" ? "你" : "教练";
+          var text = document.createElement("div"); text.textContent = m.content || "";
+          div.appendChild(label); div.appendChild(text); el.chat.appendChild(div);
+        });
+        el.chat.scrollTop = el.chat.scrollHeight;
+      }
+      function normalizeAssistantContent(content) {
+        var text = String(content || "");
+        text = text.replace(/```[\s\S]*?```/g, function (block) { return block.replace(/```/g, "").trim(); });
+        text = text.replace(/^\s{0,3}#{1,6}\s*/gm, "").replace(/^\s*[-*+]\s+/gm, "").replace(/^\s*\d+\.\s+/gm, "");
+        text = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/\n{3,}/g, "\n\n");
+        return text.trim();
+      }
+      function getApiKey() { return el.apiKey.value.trim(); }
+      function getNotionParentId() { return (el.notionParentId.value || "").trim(); }
+      function cleanNotionId(id) {
+        var raw = String(id || "").trim();
+        if (!raw) return "";
+        if (/https?:\/\//i.test(raw)) {
+          var m = raw.match(/([a-f0-9]{32})/i);
+          if (m) return m[1].toLowerCase();
+          var u = raw.match(/([a-f0-9]{8}-[a-f0-9-]{27})/i);
+          if (u) return u[1].replace(/-/g, "").toLowerCase();
+        }
+        return raw.replace(/-/g, "").toLowerCase();
+      }
+      function withTimeout(promise, ms, msg) {
+        return Promise.race([
+          promise,
+          new Promise(function (_, reject) {
+            setTimeout(function () { reject(new Error(msg || "请求超时")); }, ms || 30000);
+          })
+        ]);
+      }
+      async function notionFetch(path, options) {
+        var opts = options || {};
+        var method = (opts.method || "GET").toUpperCase();
+        var endpoint = path.indexOf("/v1/") === 0 ? path : ("/v1" + path);
+        var reqBody = null;
+        if (opts.body !== undefined && opts.body !== null) {
+          if (typeof opts.body === "string") {
+            try {
+              reqBody = JSON.parse(opts.body);
+            } catch (e) {
+              throw new Error("Notion 请求体不是合法 JSON 字符串");
+            }
+          } else {
+            reqBody = opts.body;
+          }
+        }
+        var res = null;
+        try {
+          res = await withTimeout(fetch("/api/notion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              endpoint: endpoint,
+              method: method,
+              body: reqBody
+            })
+          }), 30000, "Notion 请求超时，请稍后重试");
+        } catch (e) {
+          var msg = String((e && e.message) || e || "");
+          if (/Failed to fetch/i.test(msg)) {
+            throw new Error("请求 /api/notion 失败。请确认已部署到 Vercel，且 API 路由可用。");
+          }
+          throw e;
+        }
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error((data && (data.message || data.code)) || "Notion 请求失败");
+        return data;
+      }
+      async function getNotionParentInfo() {
+        var rawId = getNotionParentId();
+        if (!rawId) throw new Error("请先填写 Notion 父页面/数据库 ID。");
+        var id = cleanNotionId(rawId);
+        if (!/^[a-f0-9]{32}$/i.test(id)) {
+          throw new Error("父页面/数据库 ID 格式不正确。可直接粘贴 Notion 页面或数据库链接。");
+        }
+        var dbErr = null;
+        try {
+          var db = await notionFetch("/databases/" + id, { method: "GET" });
+          return { id: id, type: "database", title: db.title || [], properties: db.properties || {} };
+        } catch (e) { dbErr = e; }
+        try {
+          await notionFetch("/pages/" + id, { method: "GET" });
+          return { id: id, type: "page", properties: {} };
+        } catch (e2) {
+          var msg = "父页面/数据库 ID 无效，或该 Integration 无访问权限。";
+          if (dbErr && dbErr.message) msg += " 数据库校验：" + dbErr.message;
+          if (e2 && e2.message) msg += " 页面校验：" + e2.message;
+          throw new Error(msg);
+        }
+      }
+
+      function openDB() {
+        if (dbPromise) return dbPromise;
+        dbPromise = new Promise(function (resolve, reject) {
+          var req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = function (event) {
+            var db = event.target.result;
+            if (!db.objectStoreNames.contains(IDEA_STORE)) {
+              var store = db.createObjectStore(IDEA_STORE, { keyPath: "id", autoIncrement: true });
+              store.createIndex("updatedAt", "updatedAt", { unique: false });
+            }
+          };
+          req.onsuccess = function (event) { resolve(event.target.result); };
+          req.onerror = function () { reject(req.error || new Error("IndexedDB 打开失败")); };
+        });
+        return dbPromise;
+      }
+      async function addIdea(idea) { var db = await openDB(); return new Promise(function (resolve, reject) { var req = db.transaction(IDEA_STORE, "readwrite").objectStore(IDEA_STORE).add(idea); req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; }); }
+      async function updateIdea(idea) { var db = await openDB(); return new Promise(function (resolve, reject) { var req = db.transaction(IDEA_STORE, "readwrite").objectStore(IDEA_STORE).put(idea); req.onsuccess = function () { resolve(req.result); }; req.onerror = function () { reject(req.error); }; }); }
+      async function getIdeaById(id) { var db = await openDB(); return new Promise(function (resolve, reject) { var req = db.transaction(IDEA_STORE, "readonly").objectStore(IDEA_STORE).get(id); req.onsuccess = function () { resolve(req.result || null); }; req.onerror = function () { reject(req.error); }; }); }
+      async function getAllIdeas() {
+        var db = await openDB();
+        return new Promise(function (resolve, reject) {
+          var req = db.transaction(IDEA_STORE, "readonly").objectStore(IDEA_STORE).getAll();
+          req.onsuccess = function () { var list = req.result || []; list.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }); resolve(list); };
+          req.onerror = function () { reject(req.error); };
+        });
+      }
+      function formatTime(ts) { try { return ts ? new Date(ts).toLocaleString() : "未知时间"; } catch (e) { return "未知时间"; } }
+      async function refreshIdeaList() {
+        try {
+          var ideas = await getAllIdeas();
+          el.ideaList.innerHTML = "";
+          if (!ideas.length) { var empty = document.createElement("div"); empty.className = "hint"; empty.textContent = "暂无已保存 Idea"; el.ideaList.appendChild(empty); return; }
+          ideas.forEach(function (idea) {
+            var item = document.createElement("div"); item.className = "idea-item";
+            var title = document.createElement("div"); title.className = "idea-item-title"; title.textContent = idea.title || "未命名 Idea";
+            var meta = document.createElement("div"); meta.className = "idea-item-meta"; meta.textContent = "更新于 " + formatTime(idea.updatedAt);
+            var actions = document.createElement("div"); actions.className = "idea-item-actions";
+            var btnLoad = document.createElement("button"); btnLoad.type = "button"; btnLoad.className = "btn btn-secondary"; btnLoad.textContent = "恢复会话";
+            btnLoad.addEventListener("click", function () {
+              state.currentIdeaId = idea.id;
+              state.messages = Array.isArray(idea.messages) ? idea.messages.slice() : [];
+              state.uiPhase = idea.uiPhase || 1;
+              state.phase1AssistantCount = 0;
+              persistState(); renderMessages(); updatePhaseUI();
+            });
+            var btnViewReport = document.createElement("button"); btnViewReport.type = "button"; btnViewReport.className = "btn btn-secondary"; btnViewReport.textContent = "查看报告";
+            btnViewReport.addEventListener("click", async function () {
+              var fresh = await getIdeaById(idea.id); if (!fresh) return;
+              state.currentIdeaId = fresh.id; persistState();
+              el.reportPanel.classList.add("visible"); el.reportEditor.value = fresh.report || "";
+            });
+            var btnExportNotion = document.createElement("button");
+            btnExportNotion.type = "button";
+            btnExportNotion.className = "btn btn-secondary";
+            btnExportNotion.textContent = "📤 导出到 Notion";
+            btnExportNotion.addEventListener("click", async function () {
+              var oldText = btnExportNotion.textContent;
+              btnExportNotion.disabled = true;
+              btnExportNotion.textContent = "导出中…";
+              try {
+                await exportIdeaToNotion(idea.id);
+                alert("已导出到 Notion");
+              } catch (err) {
+                showError("导出到 Notion 失败：" + (err.message || String(err)));
+              } finally {
+                btnExportNotion.disabled = false;
+                btnExportNotion.textContent = oldText;
+              }
+            });
+            actions.appendChild(btnLoad);
+            actions.appendChild(btnViewReport);
+            actions.appendChild(btnExportNotion);
+            item.appendChild(title); item.appendChild(meta); item.appendChild(actions); el.ideaList.appendChild(item);
+          });
+        } catch (e) { showError("读取 Idea 列表失败：" + (e.message || String(e))); }
+      }
+      function safeJsonParse(text) {
+        try { return JSON.parse(text); } catch (e) {}
+        var match = String(text || "").match(/\{[\s\S]*\}/);
+        if (match) {
+          try { return JSON.parse(match[0]); } catch (e2) {}
+        }
+        return null;
+      }
+      async function analyzeIdeaByDeepSeek(idea) {
+        var key = getApiKey();
+        if (!key) throw new Error("请先填写 DeepSeek API Key，才能做导出分析。");
+        var systemPrompt =
+          "你是结构化信息提取助手。请根据用户提供的头脑风暴 Idea 内容进行分类并提取字段。只返回严格 JSON，不要任何解释。JSON 格式：\n" +
+          "{\n" +
+          "  \"category\": \"writing|product|action\",\n" +
+          "  \"extractedFields\": {\n" +
+          "    \"topic\": \"\",\n" +
+          "    \"structure\": \"\",\n" +
+          "    \"keyPhrases\": [],\n" +
+          "    \"tone\": \"\",\n" +
+          "    \"coreFeatures\": \"\",\n" +
+          "    \"targetUsers\": \"\",\n" +
+          "    \"techStack\": [],\n" +
+          "    \"userStories\": [],\n" +
+          "    \"taskList\": \"\",\n" +
+          "    \"timeline\": \"\",\n" +
+          "    \"resources\": \"\"\n" +
+          "  }\n" +
+          "}";
+        var content = "标题：" + (idea.title || "") + "\n\n报告：\n" + (idea.report || "") + "\n\n对话：\n" + (idea.messages || []).map(function (m) {
+          return "[" + (m.role === "user" ? "用户" : "AI") + "] " + (m.content || "");
+        }).join("\n");
+        var body = {
+          model: MODEL,
+          stream: false,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: content }
+          ]
+        };
+        var res = await withTimeout(fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify(body)
+        }), 30000, "DeepSeek 分析超时，请稍后重试");
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error((data.error && data.error.message) || "DeepSeek 分析失败");
+        var text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        var parsed = safeJsonParse(text);
+        if (!parsed || !parsed.category) throw new Error("AI 分析结果格式异常");
+        return parsed;
+      }
+      function toRichText(text) {
+        var raw = String(text || "");
+        if (!raw) raw = "待补充";
+        var chunks = [];
+        for (var i = 0; i < raw.length; i += 1800) {
+          chunks.push(raw.slice(i, i + 1800));
+        }
+        return chunks.map(function (chunk) { return { type: "text", text: { content: chunk } }; });
+      }
+      function pickTitlePropertyName(properties) {
+        var names = Object.keys(properties || {});
+        for (var i = 0; i < names.length; i++) {
+          var n = names[i];
+          if (properties[n] && properties[n].type === "title") return n;
+        }
+        return names.length ? names[0] : "Name";
+      }
+      function makeParagraphBlocks(text) {
+        return String(text || "").split(/\r?\n/).map(function (line) {
+          return { object: "block", type: "paragraph", paragraph: { rich_text: toRichText(line || " ") } };
+        });
+      }
+      function buildNotionContentText(idea) {
+        var lines = [];
+        lines.push("头脑风暴记录");
+        lines.push("保存时间：" + formatDateTime(idea.updatedAt || Date.now()));
+        lines.push("");
+        lines.push("对话历史");
+        (idea.messages || []).forEach(function (m) {
+          lines.push("[" + (m.role === "user" ? "用户" : "AI") + "]：" + (m.content || ""));
+        });
+        lines.push("");
+        lines.push("最终细化结果");
+        lines.push(idea.report || "待补充");
+        return lines.join("\n");
+      }
+      function buildDynamicProperties(analysis, parentInfo, idea) {
+        var props = {};
+        if (parentInfo.type !== "database") return props;
+        var schema = parentInfo.properties || {};
+        var field = (analysis && analysis.extractedFields) || {};
+        var category = analysis && analysis.category ? analysis.category : "action";
+        var titleProp = pickTitlePropertyName(schema);
+        props[titleProp] = { title: [{ type: "text", text: { content: idea.title || "未命名 Idea" } }] };
+        function setRich(name, value) {
+          if (!schema[name]) return;
+          if (schema[name].type === "rich_text") props[name] = { rich_text: toRichText(value) };
+          if (schema[name].type === "title") props[name] = { title: toRichText(value) };
+          if (schema[name].type === "select") props[name] = { select: { name: String(value || "待补充") } };
+        }
+        if (schema["分类"]) {
+          if (schema["分类"].type === "select") props["分类"] = { select: { name: category } };
+          else if (schema["分类"].type === "rich_text") props["分类"] = { rich_text: toRichText(category) };
+        }
+        if (category === "writing") {
+          setRich("主题", field.topic || "");
+          setRich("结构", field.structure || "");
+          setRich("相关词句", (field.keyPhrases || []).join("；"));
+          setRich("语气", field.tone || "");
+        } else if (category === "product") {
+          setRich("核心功能", field.coreFeatures || "");
+          setRich("目标用户", field.targetUsers || "");
+          setRich("技术栈", (field.techStack || []).join("、"));
+          setRich("用户故事", (field.userStories || []).join("\n"));
+        } else {
+          setRich("任务清单", field.taskList || "");
+          setRich("时间规划", field.timeline || "");
+          setRich("所需资源", field.resources || "");
+        }
+        return props;
+      }
+      async function createNotionPage(parentInfo, idea, analysis) {
+        var contentText = buildNotionContentText(idea);
+        var pageTitle = (idea.title || "未命名 Idea").slice(0, 100);
+        var payload = {
+          parent: parentInfo.type === "database" ? { database_id: parentInfo.id } : { page_id: parentInfo.id },
+          properties: parentInfo.type === "database"
+            ? buildDynamicProperties(analysis, parentInfo, idea)
+            : { title: [{ type: "text", text: { content: pageTitle } }] },
+          children: makeParagraphBlocks(contentText)
+        };
+        var created = await notionFetch("/pages", { method: "POST", body: JSON.stringify(payload) });
+        return created;
+      }
+      async function exportIdeaToNotion(ideaId) {
+        var idea = await getIdeaById(ideaId);
+        if (!idea) throw new Error("未找到该 Idea。");
+        var parentInfo = await getNotionParentInfo();
+        var analysis = await analyzeIdeaByDeepSeek(idea);
+        var created = await createNotionPage(parentInfo, idea, analysis);
+        if (created && created.url) window.open(created.url, "_blank");
+      }
+      async function saveCurrentIdea(titleOverride) {
+        var now = Date.now();
+        var title = titleOverride || "";
+        if (!title) {
+          var firstUser = state.messages.find(function (m) { return m.role === "user" && (m.content || "").trim(); });
+          title = firstUser ? firstUser.content.slice(0, 24) : "未命名 Idea";
+        }
+        if (state.currentIdeaId) {
+          var existing = await getIdeaById(state.currentIdeaId);
+          if (existing) {
+            existing.title = existing.title || title;
+            existing.messages = state.messages.slice();
+            existing.uiPhase = state.uiPhase;
+            existing.updatedAt = now;
+            await updateIdea(existing);
+            await refreshIdeaList();
+            return existing.id;
+          }
+        }
+        var id = await addIdea({ title: title, messages: state.messages.slice(), uiPhase: state.uiPhase, report: "", createdAt: now, updatedAt: now });
+        state.currentIdeaId = id;
+        persistState();
+        await refreshIdeaList();
+        return id;
+      }
+
+      function compact(text) { return String(text || "").replace(/\s+/g, " ").trim(); }
+      function parseCompactAnswers(text) {
+        var out = {}; var s = compact(text).toUpperCase(); var m; var r = /([1-9]\d*)([A-F])/g;
+        while ((m = r.exec(s))) out[m[1]] = m[2];
+        return out;
+      }
+      function detectQuestionType(text) {
+        var t = String(text || "");
+        if (/逻辑漏洞/.test(t)) return "逻辑漏洞";
+        if (/反向案例/.test(t)) return "反向案例";
+        if (/隐藏假设/.test(t)) return "隐藏假设";
+        if (/视角切换/.test(t)) return "视角切换";
+        if (/极端化测试/.test(t)) return "极端化测试";
+        if (/情绪溯源/.test(t)) return "情绪溯源";
+        if (/可行性挑战/.test(t)) return "可行性挑战";
+        if (/质询/.test(t)) return "质询";
+        return "待识别";
+      }
+      function extractQuestionAndFollowup(aiText) {
+        var text = String(aiText || "").trim();
+        var parts = text.split(/\r?\n/).filter(function (x) { return x.trim(); });
+        var question = "";
+        var followup = "";
+        for (var i = 0; i < parts.length; i++) {
+          if (!question && /[？?]\s*$/.test(parts[i])) {
+            question = parts[i].trim();
+            continue;
+          }
+          if (question && /[？?]\s*$/.test(parts[i])) {
+            followup = parts[i].trim();
+            break;
+          }
+        }
+        if (!question) question = text || "待补充";
+        if (!followup) {
+          var m = text.match(/(?:追问|下一步问题|下一层问题|请回答)[：:]\s*([^\n]+[？?])/);
+          if (m) followup = m[1].trim();
+        }
+        return { question: question, followup: followup || "待补充" };
+      }
+      function formatDateTime(ts) {
+        var d = ts ? new Date(ts) : new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var day = String(d.getDate()).padStart(2, "0");
+        var hh = String(d.getHours()).padStart(2, "0");
+        var mm = String(d.getMinutes()).padStart(2, "0");
+        return y + "-" + m + "-" + day + " " + hh + ":" + mm;
+      }
+      function generateReportFromMessages(messages) {
+        var list = Array.isArray(messages) ? messages : [];
+        var firstUser = list.find(function (m) { return m.role === "user" && (m.content || "").trim(); });
+        var idea = firstUser ? firstUser.content.trim() : "待补充";
+        var qk = /(质询|逻辑漏洞|反向案例|隐藏假设|视角切换|极端化测试|情绪溯源|可行性挑战)/;
+        var ik = /(核心目标|体裁|读者|风格|时间紧迫度|资源预算|成功标准|技术栈|目标用户|参与人|时长|硬性约束)/;
+        var rk = /(第\\s*[123一二三]\\s*轮|结构建议|用户故事|模块树|代码片段|执行清单)/;
+        var questioning = [], infoDims = [], refinement = [], notes = [];
+        var dimMap = {
+          "核心目标": "待补充",
+          "时间紧迫度": "待补充",
+          "资源预算": "待补充",
+          "成功标准": "待补充",
+          "体裁": "待补充",
+          "读者": "待补充",
+          "风格": "待补充",
+          "形式": "待补充",
+          "技术栈": "待补充",
+          "目标用户": "待补充",
+          "参与人": "待补充",
+          "时长": "待补充",
+          "硬性约束": "待补充"
+        };
+        for (var i = 0; i < list.length; i++) {
+          var m = list[i]; if (m.role !== "assistant") continue;
+          var c = String(m.content || ""); var next = list[i + 1] && list[i + 1].role === "user" ? list[i + 1] : null;
+          if ((qk.test(c) || /[？?]\\s*$/.test(c.trim())) && !ik.test(c) && !rk.test(c)) {
+            var ans = next ? String(next.content || "").trim() : "待补充";
+            if (/^(跳过|进入下一阶段|下一阶段)$/i.test(ans)) ans = "跳过";
+            var qa = extractQuestionAndFollowup(c);
+            questioning.push({ type: detectQuestionType(c), q: qa.question, a: ans || "待补充" });
+            continue;
+          }
+          if (ik.test(c)) {
+            var lines = c.split(/\\r?\\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+            var dims = lines.filter(function (line) { return /[:：]/.test(line) && ik.test(line); });
+            var reply = next ? String(next.content || "").trim() : "";
+            var map = parseCompactAnswers(reply);
+            dims.forEach(function (line, idx) {
+              var dim = line.split(/[:：]/)[0].trim();
+              var val = map[String(idx + 1)] || reply || "待补充";
+              infoDims.push({ dim: dim, val: val });
+              Object.keys(dimMap).forEach(function (key) {
+                if (dim.indexOf(key) !== -1 && dimMap[key] === "待补充") dimMap[key] = val;
+              });
+            });
+            if (!dims.length) notes.push("检测到信息补全内容但未识别维度。");
+            continue;
+          }
+          if (rk.test(c)) {
+            var rm = c.match(/第\\s*([123一二三])\\s*轮/);
+            var round = rm ? rm[1] : "待识别";
+            var answers = []; var j = i + 1;
+            while (j < list.length) {
+              if (list[j].role === "assistant" && rk.test(String(list[j].content || ""))) break;
+              if (list[j].role === "user") answers.push(String(list[j].content || "").trim());
+              j++;
+            }
+            var parts = extractQuestionAndFollowup(c);
+            refinement.push({
+              round: round,
+              ai: c.trim(),
+              followup: parts.followup,
+              user: answers.length ? answers.join("\\n") : "待补充"
+            });
+          }
+        }
+        if (!questioning.length) notes.push("未稳定识别到质询问答。");
+        if (!infoDims.length) notes.push("未稳定识别到信息补全维度。");
+        if (!refinement.length) notes.push("未稳定识别到细化轮次。");
+        var title = idea.split(/\r?\n/)[0].trim() || "未命名想法";
+        var out = "";
+        out += "头脑风暴报告：《" + title + "》\n\n";
+        out += "一、原始想法\n";
+        out += idea + "\n\n";
+        out += "二、深度质询记录\n";
+        if (questioning.length) {
+          questioning.forEach(function (item, idx) {
+            out += (idx + 1) + ". 质询（[" + item.type + "]）：[" + item.q + "]\n";
+            out += "   回答：[" + (item.a || "待补充") + "]\n";
+          });
+        } else {
+          out += "1. 质询（[待识别]）：[待补充]\n";
+          out += "   回答：[待补充]\n";
+        }
+        out += "（如有更多质询，继续增加条目）\n\n";
+        out += "三、信息补全\n";
+        out += "核心目标：[" + dimMap["核心目标"] + "]\n";
+        out += "时间紧迫度：[" + dimMap["时间紧迫度"] + "]\n";
+        out += "资源预算：[" + dimMap["资源预算"] + "]\n";
+        out += "成功标准：[" + dimMap["成功标准"] + "]\n";
+        out += "体裁（仅写作模块）：[" + dimMap["体裁"] + "]\n";
+        out += "读者（仅写作模块）：[" + dimMap["读者"] + "]\n";
+        out += "风格（仅写作模块）：[" + dimMap["风格"] + "]\n";
+        out += "形式（仅产品模块）：[" + dimMap["形式"] + "]\n";
+        out += "技术栈（仅产品模块）：[" + dimMap["技术栈"] + "]\n";
+        out += "目标用户（仅产品模块）：[" + dimMap["目标用户"] + "]\n";
+        out += "参与人（仅做事模块）：[" + dimMap["参与人"] + "]\n";
+        out += "时长（仅做事模块）：[" + dimMap["时长"] + "]\n";
+        out += "硬性约束（仅做事模块）：[" + dimMap["硬性约束"] + "]\n";
+        out += "（其他自定义维度可自行添加）\n\n";
+        out += "四、多轮细化记录\n";
+        if (refinement.length) {
+          refinement.forEach(function (r, idx) {
+            out += "第" + (r.round || (idx + 1)) + "轮\n";
+            out += "AI 输出：[" + (r.ai || "待补充") + "]\n";
+            out += "追问：[" + (r.followup || "待补充") + "]\n";
+            out += "您的回答：[" + (r.user || "待补充") + "]\n\n";
+          });
+        } else {
+          out += "第1轮\nAI 输出：[待补充]\n追问：[待补充]\n您的回答：[待补充]\n\n";
+          out += "第2轮\nAI 输出：[待补充]\n追问：[待补充]\n您的回答：[待补充]\n\n";
+          out += "第3轮\nAI 输出：[待补充]\n追问：[待补充]\n您的回答：[待补充]\n\n";
+        }
+        out += "（如有更多轮次，继续增加）\n\n";
+        out += "五、阶段性成果（用户可手动补充）\n";
+        out += "[此处用户可以输入任何文字，AI 不会分析，仅作储存。例如：已完成初稿、已画出原型图、已订好酒店等]\n\n";
+        out += "------------------------------\n";
+        out += "生成时间：" + formatDateTime(Date.now()) + "\n";
+        if (notes.length) {
+          out += "\n解析提示：\n";
+          notes.forEach(function (n, idx) { out += (idx + 1) + ". " + n + "\n"; });
+        }
+        return out;
+      }
+      async function callDeepSeek() {
+        var key = getApiKey(); if (!key) { showError("请先填写并保存 DeepSeek API Key。"); return; }
+        showError(""); el.btnSend.disabled = true; el.btnSkip.disabled = true; el.loading.style.display = "block";
+        var body = { model: MODEL, stream: false, messages: [{ role: "system", content: SYSTEM_PROMPT }].concat(state.messages.map(function (m) { return { role: m.role, content: m.content }; })) };
+        try {
+          var res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify(body) });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error((data.error && data.error.message) || res.statusText || "请求失败");
+          var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (typeof content !== "string") throw new Error("响应格式异常");
+          state.messages.push({ role: "assistant", content: normalizeAssistantContent(content) });
+          if (state.uiPhase === 1) state.phase1AssistantCount += 1;
+          persistState(); renderMessages(); updatePhaseUI();
+        } catch (err) { showError(err.message || String(err)); }
+        finally { el.loading.style.display = "none"; el.btnSend.disabled = false; el.btnSkip.disabled = false; updatePhaseUI(); }
+      }
+      function sendUserContent(text, opts) {
+        opts = opts || {};
+        var trimmed = (text || "").trim();
+        if (!trimmed && !opts.allowEmpty) return;
+        if (!opts.skipUserMessage) { state.messages.push({ role: "user", content: trimmed }); persistState(); renderMessages(); }
+        callDeepSeek();
+      }
+
+      el.btnSend.addEventListener("click", function () { sendUserContent(el.input.value); el.input.value = ""; });
+      el.input.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendUserContent(el.input.value); el.input.value = ""; } });
+      el.btnSkip.addEventListener("click", function () { sendUserContent("跳过"); });
+      el.btnNextPhase.addEventListener("click", function () { if (state.uiPhase !== 1 || state.phase1AssistantCount < 3) return; state.uiPhase = 2; persistState(); updatePhaseUI(); sendUserContent("进入下一阶段，请开始信息补全阶段。"); });
+      el.btnPhase3.addEventListener("click", function () { if (state.uiPhase !== 2) return; state.uiPhase = 3; persistState(); updatePhaseUI(); sendUserContent("信息确认无误，请进入阶段三并开始多轮细化。"); });
+      el.btnReset.addEventListener("click", function () {
+        if (state.messages.length > 0 && !confirm("确定清空所有对话并重新开始吗？")) return;
+        state.messages = []; state.uiPhase = 1; state.phase1AssistantCount = 0; state.currentIdeaId = null;
+        persistState(); renderMessages(); updatePhaseUI(); showError("");
+      });
+      el.btnSaveKey.addEventListener("click", function () { saveKey(); showError(""); var t = el.btnSaveKey.textContent; el.btnSaveKey.textContent = "已保存"; setTimeout(function () { el.btnSaveKey.textContent = t; }, 1500); });
+      el.btnSaveIdea.addEventListener("click", async function () { try { var title = prompt("请输入 Idea 标题：", "") || ""; await saveCurrentIdea(title.trim()); showError(""); } catch (e) { showError("保存 Idea 失败：" + (e.message || String(e))); } });
+      el.btnGenerateReport.addEventListener("click", function () { el.reportEditor.value = generateReportFromMessages(state.messages); el.reportPanel.classList.add("visible"); });
+      el.btnSaveReport.addEventListener("click", async function () {
+        try {
+          if (!state.currentIdeaId) { var title = prompt("当前会话未保存，请输入 Idea 标题：", "") || ""; await saveCurrentIdea(title.trim()); }
+          var idea = await getIdeaById(state.currentIdeaId); if (!idea) throw new Error("未找到当前 Idea");
+          idea.report = el.reportEditor.value || ""; idea.messages = state.messages.slice(); idea.uiPhase = state.uiPhase; idea.updatedAt = Date.now();
+          await updateIdea(idea); await refreshIdeaList(); showError("");
+        } catch (e) { showError("保存报告失败：" + (e.message || String(e))); }
+      });
+      el.btnExportReport.addEventListener("click", function () {
+        var content = el.reportEditor.value || ""; var blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "brainstorm-report-" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      });
+      el.btnCopyReport.addEventListener("click", async function () { try { await navigator.clipboard.writeText(el.reportEditor.value || ""); showError(""); } catch (e) { showError("复制失败，请检查剪贴板权限。"); } });
+      el.btnToggleReport.addEventListener("click", function () {
+        var visible = el.reportPanel.classList.contains("visible");
+        if (visible) { el.reportPanel.classList.remove("visible"); el.btnToggleReport.textContent = "展开"; }
+        else { el.reportPanel.classList.add("visible"); el.btnToggleReport.textContent = "收起"; }
+      });
+      el.btnSaveNotion.addEventListener("click", function () {
+        saveNotionConfig();
+        showError("");
+      });
+      el.btnTestNotion.addEventListener("click", async function () {
+        var old = el.btnTestNotion.textContent;
+        el.btnTestNotion.disabled = true;
+        el.btnTestNotion.textContent = "测试中…";
+        try {
+          saveNotionConfig();
+          var parent = await getNotionParentInfo();
+          alert("Notion 连接成功，类型：" + (parent.type === "database" ? "数据库" : "页面"));
+          showError("");
+        } catch (e) {
+          showError("Notion 连接失败：" + (e.message || String(e)));
+        } finally {
+          el.btnTestNotion.disabled = false;
+          el.btnTestNotion.textContent = old;
+        }
+      });
+
+      function bootstrap() { loadKey(); loadNotionConfig(); loadState(); renderMessages(); updatePhaseUI(); refreshIdeaList(); }
+      bootstrap();
+    })();
+  </script>
+</body>
+</html>
