@@ -254,7 +254,7 @@
         var opts = options || {};
         var method = (opts.method || "GET").toUpperCase();
         var endpoint = path.indexOf("/v1/") === 0 ? path : ("/v1" + path);
-        var reqBody = null;
+        var reqBody;
         if (opts.body !== undefined && opts.body !== null) {
           if (typeof opts.body === "string") {
             try {
@@ -268,14 +268,17 @@
         }
         var res = null;
         try {
+          var proxyPayload = {
+            endpoint: endpoint,
+            method: method
+          };
+          if (method !== "GET" && method !== "HEAD" && reqBody !== undefined) {
+            proxyPayload.body = reqBody;
+          }
           res = await withTimeout(fetch("/api/notion", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              endpoint: endpoint,
-              method: method,
-              body: reqBody
-            })
+            body: JSON.stringify(proxyPayload)
           }), 30000, "Notion 请求超时，请稍后重试");
         } catch (e) {
           var msg = String((e && e.message) || e || "");
